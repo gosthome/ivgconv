@@ -2,10 +2,14 @@ package ivgconv
 
 import (
 	"fmt"
+	"image/color"
+	"io"
+	"slices"
+	"strings"
+
+	"github.com/gosthome/go-svgpath"
 	"golang.org/x/exp/shiny/iconvg"
 	"golang.org/x/image/math/f32"
-	"io"
-	"strings"
 )
 
 func parseSVG(svg SVG, opts ConverterOptions) ([]byte, error) {
@@ -29,7 +33,7 @@ func parseSVG(svg SVG, opts ConverterOptions) ([]byte, error) {
 				svg.ViewBox.Height,
 			},
 		},
-		Palette: iconvg.DefaultPalette,
+		Palette: iconvg.Palette(slices.Clone[[]color.RGBA, color.RGBA](iconvg.DefaultPalette[:])),
 	})
 
 	// Calculate the offset of the iconVG image.
@@ -47,32 +51,21 @@ func parseSVG(svg SVG, opts ConverterOptions) ([]byte, error) {
 	adjs := map[float32]uint8{}
 
 	// Generate the iconVG path.
-	for _, p := range svg.Paths {
-		// Skip the excluded paths.
-		skip := false
-		for _, ep := range opts.ExcludePath {
-			if p.D == ep.D && p.Fill == ep.Fill {
-				skip = true
-				break
+	for _, el := range svg.Elements {
+		switch element := el.(type) {
+		case Path:
+			// Generate the iconVG path from the SVG path.
+			if err := genPath(&enc, &element, adjs, svgSize, offset, outSize, nil); err != nil {
+				return nil, err
 			}
+		case Circle:
+			// Generate the iconVG path from the SVG circle.
+			if err := genPath(&enc, &Path{}, adjs, svgSize, offset, outSize, []Circle{element}); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, fmt.Errorf("Unexpected element %#v", element)
 		}
-		if skip {
-			continue
-		}
-		// Generate the iconVG path from the SVG path.
-		if err := genPath(&enc, &p, adjs, svgSize, offset, outSize, svg.Circles); err != nil {
-			return nil, err
-		}
-		svg.Circles = nil
-	}
-
-	// Generate the iconVG circle.
-	if len(svg.Circles) != 0 {
-		// Generate the iconVG path from the SVG circle.
-		if err := genPath(&enc, &Path{}, adjs, svgSize, offset, outSize, svg.Circles); err != nil {
-			return nil, err
-		}
-		svg.Circles = nil
 	}
 
 	// Return the iconVG data.
@@ -106,6 +99,10 @@ func genPath(enc *iconvg.Encoder, p *Path, adjs map[float32]uint8, size float32,
 	needStartPath := true
 	if p.D != "" {
 		needStartPath = false
+		pth, err := svgpath.From(p.D)
+		if err == nil {
+			p.D = pth.Unarc().String()
+		}
 		if err := genPathData(enc, adj, p.D, size, offset, outSize); err != nil {
 			return err
 		}
@@ -181,7 +178,6 @@ func genPathData(enc *iconvg.Encoder, adj uint8, pathData string, size float32, 
 			n = 6
 		case 'A', 'a':
 			n = 7
-			return fmt.Errorf("arcTo not supported")
 		default:
 			return fmt.Errorf("unknown opcode %c", b)
 		}
@@ -229,10 +225,10 @@ func genPathData(enc *iconvg.Encoder, adj uint8, pathData string, size float32, 
 			enc.AbsCubeTo(args[0], args[1], args[2], args[3], args[4], args[5])
 		case 'c':
 			enc.RelCubeTo(args[0], args[1], args[2], args[3], args[4], args[5])
-			//case 'A':
-			//	enc.AbsArcTo(args[0], args[1], args[2], args[3] != 0, args[4] != 0, args[5], args[6])
-			//case 'a':
-			//	enc.RelArcTo(args[0], args[1], args[2], args[3] != 0, args[4] != 0, args[5], args[6])
+		case 'A':
+			enc.AbsArcTo(args[0], args[1], args[2], args[3] != 0, args[4] != 0, args[5], args[6])
+		case 'a':
+			enc.RelArcTo(args[0], args[1], args[2], args[3] != 0, args[4] != 0, args[5], args[6])
 		}
 	}
 	return nil

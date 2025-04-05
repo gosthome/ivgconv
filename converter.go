@@ -9,8 +9,8 @@ import (
 type ConverterOptions struct {
 	// OutputSize is the size of the IconVG output image.
 	OutputSize float32
-	// ExcludePath is a list of paths to exclude from the IconVG image.
-	ExcludePath []Path
+	// Excludes is a list of elements to exclude from the IconVG image.
+	Excludes []Element
 }
 
 // Option is a function that configures a ConverterOptions.
@@ -32,11 +32,12 @@ func FromContent(content []byte, options ...Option) ([]byte, error) {
 	// Set the default converter options.
 	opts := ConverterOptions{
 		OutputSize: 48,
-		ExcludePath: []Path{
+		Excludes: []Element{
 			// Matches <path d="M0 0h24v24H0z" fill="none"/>
-			{D: "M0 0h24v24H0z", Fill: "none"},
+			Path{D: "M0 0h24v24H0z", Fill: "none"},
 			// Matches <path d="M0 0H24V24H0z" fill="none"/>
-			{D: "M0 0H24V24H0z", Fill: "none"},
+			Path{D: "M0 0H24V24H0z", Fill: "none"},
+			Rect{X: 0, Y: 0, Width: 24, Height: 24, Fill: "none"},
 		},
 	}
 	// Set the converter options.
@@ -45,11 +46,8 @@ func FromContent(content []byte, options ...Option) ([]byte, error) {
 	}
 	// Parse the SVG file.
 	var svg SVG
+	svg.ExcludeElements = opts.Excludes
 	if err := xml.Unmarshal(content, &svg); err != nil {
-		return nil, err
-	}
-	// Check if the SVG file is valid.
-	if err := svg.Validate(); err != nil {
 		return nil, err
 	}
 	// Encode the SVG file as IconVG.
@@ -63,9 +61,9 @@ func WithOutputSize(outputSize float32) Option {
 	}
 }
 
-// WithExcludePath sets the list of paths to exclude from the IconVG image.
-func WithExcludePath(excludePath []Path) Option {
+// WithExcludes sets the list of paths to exclude from the IconVG image.
+func WithExcludes(excludes []Element) Option {
 	return func(opts *ConverterOptions) {
-		opts.ExcludePath = excludePath
+		opts.Excludes = excludes
 	}
 }
