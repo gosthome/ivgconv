@@ -14,7 +14,7 @@ import (
 
 func parseSVG(svg SVG, opts ConverterOptions) ([]byte, error) {
 	// Original svgSize.
-	svgSize := svg.ViewBox.Width
+	svgSize := max(svg.ViewBox.Width, svg.ViewBox.Height)
 	// Output svgSize.
 	outSize := opts.OutputSize
 
@@ -22,15 +22,13 @@ func parseSVG(svg SVG, opts ConverterOptions) ([]byte, error) {
 	var enc iconvg.Encoder
 	enc.Reset(iconvg.Metadata{
 		ViewBox: iconvg.Rectangle{
-			//Min: f32.Vec2{-24, -24},
-			//Max: f32.Vec2{+24, +24},
 			Min: f32.Vec2{
-				svg.ViewBox.MinX - svg.ViewBox.Width,
-				svg.ViewBox.MinY - svg.ViewBox.Height,
+				(svg.ViewBox.MinX - svgSize/2) * outSize / svgSize,
+				(svg.ViewBox.MinY - svgSize/2) * outSize / svgSize,
 			},
 			Max: f32.Vec2{
-				svg.ViewBox.Width,
-				svg.ViewBox.Height,
+				(svgSize / 2) * outSize / svgSize,
+				(svgSize / 2) * outSize / svgSize,
 			},
 		},
 		Palette: iconvg.Palette(slices.Clone[[]color.RGBA, color.RGBA](iconvg.DefaultPalette[:])),
@@ -40,8 +38,8 @@ func parseSVG(svg SVG, opts ConverterOptions) ([]byte, error) {
 	// The offset is the difference between the original
 	// svgSize and the output svgSize.
 	var vbx, vby float32
-	vbx = svg.ViewBox.MinX
-	vby = svg.ViewBox.MinY
+	vbx = svg.ViewBox.MinX - (svgSize-svg.ViewBox.Width)/2
+	vby = svg.ViewBox.MinY - (svgSize-svg.ViewBox.Height)/2
 	offset := f32.Vec2{
 		vbx * outSize / svgSize,
 		vby * outSize / svgSize,

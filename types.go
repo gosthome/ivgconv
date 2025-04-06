@@ -196,12 +196,12 @@ var _ encoding.TextUnmarshaler = (*PolygonPoints)(nil)
 type Group struct {
 	Elements []Element
 
-	ExcludeElements []Element
+	ExcludeElements []ElementPredicate
 }
 
 func (g *Group) exclude(e Element) bool {
-	return slices.ContainsFunc(g.ExcludeElements, func(excl Element) bool {
-		return e.Equal(excl)
+	return slices.ContainsFunc(g.ExcludeElements, func(excl ElementPredicate) bool {
+		return excl(e)
 	})
 }
 
@@ -251,7 +251,7 @@ func (g *Group) UnmarshalXML(dec *xml.Decoder, start xml.StartElement) (err erro
 					FillOpacity: r.FillOpacity,
 					Opacity:     r.Opacity,
 				})
-			case "polygon":
+			case "polygon", "polyline":
 				var pol Polygon
 				err = dec.DecodeElement(&pol, &t)
 				if err != nil {
@@ -269,21 +269,16 @@ func (g *Group) UnmarshalXML(dec *xml.Decoder, start xml.StartElement) (err erro
 					}
 					fmt.Fprintf(&b, "%f %f", p.X, p.Y)
 				}
-				b.WriteString(" Z")
+				if t.Name.Local != "polyline" {
+					b.WriteString(" Z")
+				}
 				g.Elements = append(g.Elements, Path{
 					D:           b.String(),
 					Fill:        pol.Fill,
 					FillOpacity: pol.FillOpacity,
 					Opacity:     pol.Opacity,
 				})
-			case "g":
-				var gr Group
-				gr.ExcludeElements = g.ExcludeElements
-				err = dec.DecodeElement(&gr, &t)
-				if err != nil {
-					return err
-				}
-				g.Elements = append(g.Elements, gr.Elements...)
+
 			case "ellipse":
 				var e Ellipse
 				err = dec.DecodeElement(&e, &t)
@@ -300,6 +295,15 @@ func (g *Group) UnmarshalXML(dec *xml.Decoder, start xml.StartElement) (err erro
 					FillOpacity: e.FillOpacity,
 					Opacity:     e.Opacity,
 				})
+
+			case "g":
+				var gr Group
+				gr.ExcludeElements = g.ExcludeElements
+				err = dec.DecodeElement(&gr, &t)
+				if err != nil {
+					return err
+				}
+				g.Elements = append(g.Elements, gr.Elements...)
 
 			case "title": // ignored elements
 				err = dec.DecodeElement(&struct{}{}, &t)

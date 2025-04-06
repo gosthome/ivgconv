@@ -43,6 +43,10 @@ func TestFromFile(t *testing.T) {
 			fn:       "testdata/edit_off.svg",
 			expected: testdata.Edit_off,
 		},
+		{
+			fn:       "testdata/python.svg",
+			expected: testdata.Python,
+		},
 	}
 
 	for _, tc := range cases {

@@ -5,12 +5,20 @@ import (
 	"os"
 )
 
+type ElementPredicate func(e Element) bool
+
+func ExcludeExact(excl Element) ElementPredicate {
+	return func(e Element) bool {
+		return e.Equal(excl)
+	}
+}
+
 // ConverterOptions contains options for the SVG to IconVG converter.
 type ConverterOptions struct {
 	// OutputSize is the size of the IconVG output image.
 	OutputSize float32
 	// Excludes is a list of elements to exclude from the IconVG image.
-	Excludes []Element
+	Excludes []ElementPredicate
 }
 
 // Option is a function that configures a ConverterOptions.
@@ -32,12 +40,30 @@ func FromContent(content []byte, options ...Option) ([]byte, error) {
 	// Set the default converter options.
 	opts := ConverterOptions{
 		OutputSize: 48,
-		Excludes: []Element{
+		Excludes: []ElementPredicate{
+			func(e Element) bool {
+				fill := ""
+				switch e := e.(type) {
+				case Path:
+					fill = e.Fill
+				case Rect:
+					fill = e.Fill
+				case Circle:
+					fill = e.Fill
+				case Ellipse:
+					fill = e.Fill
+				case Polygon:
+					fill = e.Fill
+				}
+				return fill == "none"
+			},
+			ExcludeExact(Path{D: "M0 0h24v24H0V0z"}),
 			// Matches <path d="M0 0h24v24H0z" fill="none"/>
-			Path{D: "M0 0h24v24H0z", Fill: "none"},
+			// Path{D: "M0 0h24v24H0z", Fill: "none"},
+			// Path{D: "M0 0h24v24H0zm0 0h24v24H0z", Fill: "none"},
 			// Matches <path d="M0 0H24V24H0z" fill="none"/>
-			Path{D: "M0 0H24V24H0z", Fill: "none"},
-			Rect{X: 0, Y: 0, Width: 24, Height: 24, Fill: "none"},
+			// Path{D: "M0 0H24V24H0z", Fill: "none"},
+			// Rect{X: 0, Y: 0, Width: 24, Height: 24, Fill: "none"},
 		},
 	}
 	// Set the converter options.
@@ -61,9 +87,24 @@ func WithOutputSize(outputSize float32) Option {
 	}
 }
 
-// WithExcludes sets the list of paths to exclude from the IconVG image.
-func WithExcludes(excludes []Element) Option {
+// WithReplaceExcludedElements sets the list of exact elements to exclude from the IconVG image.
+func WithReplaceExcludedElements(excludes []Element) Option {
 	return func(opts *ConverterOptions) {
-		opts.Excludes = excludes
+		newRules := make([]ElementPredicate, len(excludes))
+		for _, e := range excludes {
+			newRules = append(newRules, ExcludeExact(e))
+		}
+		opts.Excludes = newRules
+	}
+}
+
+// AddExcludedElements appends the list of exact elements to exclude from the IconVG image.
+func AddExcludedElements(excludes []Element) Option {
+	return func(opts *ConverterOptions) {
+		newRules := make([]ElementPredicate, len(excludes))
+		for _, e := range excludes {
+			newRules = append(newRules, ExcludeExact(e))
+		}
+		opts.Excludes = append(opts.Excludes, newRules...)
 	}
 }
